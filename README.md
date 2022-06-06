@@ -11,3 +11,9 @@ To install the dependencies in a conda environment by running -> conda env creat
 
 # Run
 To run the experiments just run -> python train.py
+
+# TensorBoard logs
+You can check out the tensorboard logs by running the following command in a different terminal:
+tensorboard --logdir tb_logs
+
+You will find that not much info is being logged at this moment
