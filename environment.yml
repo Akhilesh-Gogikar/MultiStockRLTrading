@@ -219,7 +219,7 @@ dependencies:
     - bs4==0.0.1
     - bselib==0.0.5
     - cachetools==5.0.0
-    - capsule-layer==0.5.0
+    # - capsule-layer==0.5.0
     - cliff==3.10.1
     - cloudpickle==1.6.0
     - cmaes==0.8.2
