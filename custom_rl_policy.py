@@ -41,8 +41,8 @@ class CustomNetwork(nn.Module):
         )
         # Value network
         self.value_net = nn.Sequential(
-            nn.Linear(last_layer_dim_pi*timesteps*feature_dim, last_layer_dim_pi*feature_dim), nn.ReLU(),
-            nn.Linear(last_layer_dim_pi*feature_dim, last_layer_dim_pi), nn.Tanh()
+            nn.Linear(last_layer_dim_vf*timesteps*feature_dim, last_layer_dim_vf*feature_dim), nn.ReLU(),
+            nn.Linear(last_layer_dim_vf*feature_dim, last_layer_dim_vf), nn.Tanh()
         )
 
     def forward(self, features: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
