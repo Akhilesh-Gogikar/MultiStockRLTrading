@@ -26,6 +26,39 @@ Capsule layer library is installed by -> pip install git+https://github.com/left
 # Run
 To run the experiments just run -> python train.py
 
+## Production customization controls
+The project now includes hardening for safer mathematical execution in the trading environment and an optional LLM-driven analyst blend for live deployment customization.
+
+### 1) Safer portfolio math
+- Action vectors are validated for correct shape.
+- Zero/near-zero action sums are handled without division-by-zero.
+- Price arrays are copied before protective transforms, so valuation math remains correct.
+- Suppression-rate handling is bounded to avoid edge-case partition errors.
+
+### 2) Optional LLM technical analyst integration
+You can blend model actions with an API-driven technical analyst using OpenAI-compatible chat endpoints.
+
+Set environment variables before running inference/training:
+
+```bash
+export LLM_ANALYST_ENABLED=1
+export LLM_ANALYST_ENDPOINT="https://api.openai.com/v1/chat/completions"
+export LLM_ANALYST_API_KEY="<your_key>"
+export LLM_ANALYST_MODEL="gpt-4o-mini"
+export LLM_ANALYST_BLEND_WEIGHT=0.25
+```
+
+- `LLM_ANALYST_BLEND_WEIGHT=0.0` means RL-only.
+- `LLM_ANALYST_BLEND_WEIGHT=1.0` means LLM-only signals.
+
+The LLM is asked to return compact JSON like:
+
+```json
+{"RELIANCE": 0.4, "TCS": -0.2}
+```
+
+where each score must be in `[-1, 1]`.
+
 ## Optional: Add Indian fundamental data
 You can now enrich the RL state with fundamental factors (P/E, EPS, balance-sheet ratios, etc.) from another repository.
 
