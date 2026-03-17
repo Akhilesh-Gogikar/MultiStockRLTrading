@@ -26,6 +26,21 @@ Capsule layer library is installed by -> pip install git+https://github.com/left
 # Run
 To run the experiments just run -> python train.py
 
+## Optional: Add Indian fundamental data
+You can now enrich the RL state with fundamental factors (P/E, EPS, balance-sheet ratios, etc.) from another repository.
+
+1. Clone your other dataset repository next to this project (for example: `../indian_stock_market_data`), or set an explicit path:
+   ```bash
+   export FUNDAMENTAL_DATA_REPO=/absolute/path/to/indian_stock_market_data
+   ```
+2. Ensure the fundamentals repo contains CSV/Parquet files with:
+   - one symbol column (supported names include: `symbol`, `ticker`, `name`, `tradingsymbol`)
+   - one date column (supported names include: `date`, `datetime`, `report_date`, `fiscal_date`)
+   - one or more numeric fundamental columns
+3. Run training normally (`python train.py`). Fundamental features are auto-discovered, prefixed with `fundamental_`, and merged into each stock's intraday bars by date.
+
+If no fundamentals repo is found, training falls back to the original technical-only feature set.
+
 # TensorBoard logs
 You can check out the tensorboard logs by running the following command in a different terminal:
 tensorboard --logdir tb_logs
