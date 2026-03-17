@@ -231,7 +231,8 @@ while True:
         action, _states = model.predict(obs)
 
         if llm_config.enabled:
-                latest_row = price_df.iloc[min(env._current_tick, len(price_df) - 1)]
+                current_row_idx = env.frame_bound[0] - env.window_size + env._current_tick
+                latest_row = price_df.iloc[min(current_row_idx, len(price_df) - 1)]
                 market_snapshot = {
                         symbol: {"close": float(latest_row[symbol])}
                         for symbol in names
@@ -260,5 +261,4 @@ plt.plot(infer_steps, infer_rewards, color="red", label='Profit')
 plt.plot(infer_steps, sensex_values, color="blue", label='Index')
 plt.legend(loc="upper left")
 plt.savefig('Infer_rewards.jpg')
-
 
