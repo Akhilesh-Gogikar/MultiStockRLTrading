@@ -6,8 +6,10 @@ import gym
 from gym import spaces
 import matplotlib.pyplot as plt
 import glob
+import os
 import pandas as pd
 
+from fundamental_data import FundamentalDataIntegrator
 from multi_stock_trading_env import MultiStockTradingEnv
 from stable_baselines3 import PPO, A2C, SAC, DDPG
 from gat_capsule_policy import GATActorCriticPolicy
@@ -92,7 +94,7 @@ def add_features(tic_df):
 
 directory = 'history_data'
 
-indicators = ['open', 'high', 'low', 'close', 'volume', 'ToD', 'DoW',
+base_indicators = ['open', 'high', 'low', 'close', 'volume', 'ToD', 'DoW',
        'ret1min', 'ret2min', 'ret3min', 'ret4min', 'ret5min', 'ret6min',
        'ret7min', 'ret8min', 'ret9min', 'ret10min', 'sma', '5sma', '20sma',
        'bb_upper', 'bb_middle', 'bb_lower', 'bb_sell', 'bb_buy', 'bb_squeeze',
@@ -101,13 +103,23 @@ indicators = ['open', 'high', 'low', 'close', 'volume', 'ToD', 'DoW',
        'FAMA', 'MAMA_buy', 'KAMA_buy', 'sma_buy', 'maco', 'rsi_buy',
        'rsi_sell', 'macd_buy_sell']
 
+fundamental_repo = os.getenv('FUNDAMENTAL_DATA_REPO')
+fundamental_integrator = FundamentalDataIntegrator(repo_path=fundamental_repo)
+
+if fundamental_integrator.is_enabled:
+    print(f"Loaded {len(fundamental_integrator.feature_names)} fundamental features from: {fundamental_integrator.repo_path}")
+else:
+    print("No fundamental dataset detected. Set FUNDAMENTAL_DATA_REPO or place the repo as a sibling directory to enable fundamental features.")
+
+indicators = base_indicators + fundamental_integrator.feature_names
+
 dfs = pd.DataFrame()
 
 num_assets = 0
 
 names = []
 
-data_files = glob.iglob(f'.\{directory}/*')
+data_files = glob.iglob(f'./{directory}/*')
 
 for filename in data_files:
 
@@ -127,9 +139,10 @@ for filename in data_files:
 
 
         updated_df = add_features(df)
+        updated_df = fundamental_integrator.merge_with_price_data(updated_df, symbol=name, datetime_col='datetime')
 
         updated_df['datetime'] = pd.to_datetime(updated_df['datetime'])
-        updated_df = df.set_index(pd.DatetimeIndex(updated_df['datetime']))
+        updated_df = updated_df.set_index(pd.DatetimeIndex(updated_df['datetime']))
 
 
         updated_df.drop(['timestamp','name','token'], axis=1, inplace=True)
