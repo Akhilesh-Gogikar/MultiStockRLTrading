@@ -10,6 +10,7 @@ import os
 import pandas as pd
 
 from fundamental_data import FundamentalDataIntegrator
+from llm_analyst import LLMAnalystConfig, LLMTechnicalAnalyst, blend_actions
 from multi_stock_trading_env import MultiStockTradingEnv
 from stable_baselines3 import PPO, A2C, SAC, DDPG
 from gat_capsule_policy import GATActorCriticPolicy
@@ -112,6 +113,8 @@ else:
     print("No fundamental dataset detected. Set FUNDAMENTAL_DATA_REPO or place the repo as a sibling directory to enable fundamental features.")
 
 indicators = base_indicators + fundamental_integrator.feature_names
+llm_config = LLMAnalystConfig.from_env()
+llm_analyst = LLMTechnicalAnalyst(llm_config)
 
 dfs = pd.DataFrame()
 
@@ -226,6 +229,17 @@ infer_rewards = []
 while True: 
         # obs = obs[np.newaxis, ...]
         action, _states = model.predict(obs)
+
+        if llm_config.enabled:
+                current_row_idx = env.frame_bound[0] - env.window_size + env._current_tick
+                latest_row = price_df.iloc[min(current_row_idx, len(price_df) - 1)]
+                market_snapshot = {
+                        symbol: {"close": float(latest_row[symbol])}
+                        for symbol in names
+                }
+                llm_scores = llm_analyst.get_signal(names, market_snapshot)
+                action = blend_actions(action, llm_scores, names, llm_config.blend_weight)
+
         count+=1
         obs, rewards, done, info = env.step(action)
         # print(action, rewards)
@@ -247,6 +261,4 @@ plt.plot(infer_steps, infer_rewards, color="red", label='Profit')
 plt.plot(infer_steps, sensex_values, color="blue", label='Index')
 plt.legend(loc="upper left")
 plt.savefig('Infer_rewards.jpg')
-
-
 

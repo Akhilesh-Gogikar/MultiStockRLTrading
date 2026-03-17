@@ -1,4 +1,3 @@
-from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_STATUS_RESPONSE
 import gym
 import matplotlib
 import matplotlib.pyplot as plt
@@ -37,11 +36,14 @@ class MultiStockTradingEnv(gym.Env):
         window_size,
         frame_bound,
         scalers=None,
-        tech_indicator_list=[],
+        tech_indicator_list=None,
         reward_scaling=1e-5,
         suppresention_rate=0.66,
         representative=None
     ):
+        if tech_indicator_list is None:
+            tech_indicator_list = []
+
         if len(tech_indicator_list)!=0:
             num_features = len(tech_indicator_list)
         self.dfs = dfs
@@ -84,7 +86,7 @@ class MultiStockTradingEnv(gym.Env):
         
 
         self.representative = representative
-        self.suppression_rate = suppresention_rate
+        self.suppression_rate = float(np.clip(suppresention_rate, 0.0, 1.0))
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -139,6 +141,10 @@ class MultiStockTradingEnv(gym.Env):
         self._done = False
         self._current_tick += 1
 
+        actions = np.asarray(actions, dtype=np.float64)
+        if actions.shape != (self.assets,):
+            raise ValueError(f"Expected action shape {(self.assets,)}, got {actions.shape}")
+
         if self._current_tick == self._end_tick:
             self._done = True
 
@@ -150,7 +156,7 @@ class MultiStockTradingEnv(gym.Env):
 
         current_prices[np.isnan(current_prices)] = 0
 
-        current_prices_for_division = current_prices
+        current_prices_for_division = current_prices.copy()
 
         current_prices_for_division[current_prices_for_division == 0] = 1e9
 
@@ -164,16 +170,22 @@ class MultiStockTradingEnv(gym.Env):
         # At any point in time we only trade for 33% of the stocks the model is most confident about
         # the scores for the rest are suppressed
 
-        N = int(np.round(abs_portfolio_dist.size*self.suppression_rate))
-
-        abs_portfolio_dist[np.argpartition(abs_portfolio_dist,kth=N)[:N]] = 0
+        num_to_suppress = int(np.floor(abs_portfolio_dist.size*self.suppression_rate))
+        if num_to_suppress >= abs_portfolio_dist.size:
+            num_to_suppress = abs_portfolio_dist.size - 1
+        if num_to_suppress > 0:
+            abs_portfolio_dist[np.argpartition(abs_portfolio_dist, kth=num_to_suppress - 1)[:num_to_suppress]] = 0
 
         # print(abs_portfolio_dist)
 
         self.margin = self.reserve + sum(self.portfolio*current_prices)
 
         #Normalize the portfolio positions for next step
-        norm_margin_pos = (abs_portfolio_dist/sum(abs_portfolio_dist))*self.margin
+        position_denominator = float(np.sum(abs_portfolio_dist))
+        if position_denominator <= 0:
+            norm_margin_pos = np.zeros_like(abs_portfolio_dist)
+        else:
+            norm_margin_pos = (abs_portfolio_dist / position_denominator) * self.margin
 
         #Calulate the money in the next positions
         next_positions = np.sign(actions)*norm_margin_pos
