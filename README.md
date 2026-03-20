@@ -1,41 +1,121 @@
 # MultiStockRLTrading
-Trading multiple stocks using custom gym environment and custom neural network with StableBaselines3.
 
-This work is part of a series of articles written on medium on Applied RL:
+Trading multiple stocks using a custom Gym environment and custom neural network policies with Stable-Baselines3.
 
-1) Customized Deep Reinforcement Learning for Algorithmic Trading: https://medium.com/@akhileshgogikar/custom-deep-rl-for-algo-trading-106b1a2daa16
+This repository is now prepared for **intelligent multi-asset alpha research**, including a modular training entrypoint, optional LLM analyst blending, and a new **cross-attention policy** that can reason across assets instead of treating each series independently.
 
-2) Custom RL for Algo Trading — Data Preprocessing: https://medium.com/@akhileshgogikar/applied-rl-data-preprocessing-for-algo-trading-4478251b9676
+## What is new
 
-3) Custom Gym environment for multi-stock RL based Algo trading: https://medium.com/@akhileshgogikar/custom-gym-environment-for-multi-stock-algo-trading-113b07dd445d
+### Cross-attention policy for multi-asset alpha
+The project now includes `CrossAttentionActorCriticPolicy`, which is designed for the exact workflow you described:
+- encode each asset's rolling feature window,
+- apply **temporal self-attention** within each asset,
+- apply **cross-asset attention** across the asset universe,
+- compress the shared representation into PPO actor/critic latents.
 
-4) Customization of RL policies using StableBaselines3: https://medium.com/@akhileshgogikar/applied-rl-customizing-neural-networks-for-rl-policies-a5a9e2cf763e
+This makes the codebase a better starting point for:
+- relative-value and rotation strategies,
+- sector/index lead-lag modeling,
+- market-regime aware allocation,
+- alpha generation from inter-asset relationships.
 
-5) Advanced deep learning customization of neural networks for RL based Algo trading: https://medium.com/@akhileshgogikar/applied-reinforcement-learning-3e73ca771bac
+### Research-friendly training CLI
+`train.py` is now a configurable script instead of a single hard-coded experiment. You can choose:
+- policy architecture,
+- total timesteps,
+- window size,
+- train/eval split,
+- model name,
+- data directory,
+- whether to skip inference.
 
-# Dependencies
+### Robustness improvements
+- Graph/capsule policy code no longer hardcodes `cuda:0` for graph edges.
+- Legacy GAT attention now respects the configured time window instead of assuming 12 steps.
+- Training saves artifacts into predictable directories (`saved_models/`, `artifacts/`).
 
-1) Install Conda
-2) If you have a GPU install - Cuda and Cudnn to enable GPU usage 
+## Included policy architectures
 
-# Installation
-To install the dependencies in a conda environment by running -> conda env create -f environment.yml
+The training entrypoint supports the following PPO policies:
 
-Capsule layer library is installed by -> pip install git+https://github.com/leftthomas/CapsuleLayer.git@master
+1. `custom`
+   - the original dense policy head.
+2. `gat`
+   - the graph/capsule-based architecture.
+3. `cross_attention`
+   - the recommended starting point for intelligent multi-asset alpha modeling.
 
-# Run
-To run the experiments just run -> python train.py
+## Installation
 
-## Production customization controls
-The project now includes hardening for safer mathematical execution in the trading environment and an optional LLM-driven analyst blend for live deployment customization.
+### Conda environment
+Create the environment:
 
-### 1) Safer portfolio math
-- Action vectors are validated for correct shape.
-- Zero/near-zero action sums are handled without division-by-zero.
-- Price arrays are copied before protective transforms, so valuation math remains correct.
-- Suppression-rate handling is bounded to avoid edge-case partition errors.
+```bash
+conda env create -f environment.yml
+conda activate multi_stock_rl_trading
+```
 
-### 2) Optional LLM technical analyst integration
+Capsule layer library is still installed separately:
+
+```bash
+pip install git+https://github.com/leftthomas/CapsuleLayer.git@master
+```
+
+## Running experiments
+
+### Recommended: cross-attention policy
+
+```bash
+python train.py --policy cross_attention --timesteps 10000 --model-name cross_attention_alpha
+```
+
+### Original dense baseline
+
+```bash
+python train.py --policy custom --timesteps 10000 --model-name dense_baseline
+```
+
+### Graph/capsule variant
+
+```bash
+python train.py --policy gat --timesteps 10000 --model-name gat_alpha
+```
+
+### Useful flags
+
+```bash
+python train.py \
+  --policy cross_attention \
+  --timesteps 25000 \
+  --window-size 24 \
+  --train-split 1500 \
+  --batch-size 256 \
+  --model-name xattn_v1
+```
+
+## Data pipeline
+
+The repo expects per-asset files under `history_data/` with at least:
+- `datetime`
+- `timestamp`
+- `name`
+- `token`
+- OHLCV columns (`open`, `high`, `low`, `close`, `volume`)
+
+`train.py` automatically:
+- computes technical indicators,
+- merges optional fundamentals,
+- aligns all assets into a common panel,
+- builds a `MultiStockTradingEnv` observation tensor with shape:
+
+```text
+(num_assets, window_size, num_features)
+```
+
+That observation layout is what enables the new cross-attention policy to model inter-asset structure directly.
+
+## Optional: LLM technical analyst integration
+
 You can blend model actions with an API-driven technical analyst using OpenAI-compatible chat endpoints.
 
 Set environment variables before running inference/training:
@@ -60,7 +140,8 @@ The LLM is asked to return compact JSON like:
 where each score must be in `[-1, 1]`.
 
 ## Optional: Add Indian fundamental data
-You can now enrich the RL state with fundamental factors (P/E, EPS, balance-sheet ratios, etc.) from another repository.
+
+You can enrich the RL state with fundamental factors (P/E, EPS, balance-sheet ratios, etc.) from another repository.
 
 1. Clone your other dataset repository next to this project (for example: `../indian_stock_market_data`), or set an explicit path:
    ```bash
@@ -70,25 +151,39 @@ You can now enrich the RL state with fundamental factors (P/E, EPS, balance-shee
    - one symbol column (supported names include: `symbol`, `ticker`, `name`, `tradingsymbol`)
    - one date column (supported names include: `date`, `datetime`, `report_date`, `fiscal_date`)
    - one or more numeric fundamental columns
-3. Run training normally (`python train.py`). Fundamental features are auto-discovered, prefixed with `fundamental_`, and merged into each stock's intraday bars by date.
+3. Run training normally. Fundamental features are auto-discovered, prefixed with `fundamental_`, and merged into each stock's bars by date.
 
 If no fundamentals repo is found, training falls back to the original technical-only feature set.
 
-# TensorBoard logs
-You can check out the tensorboard logs by running the following command in a different terminal:
+## Suggested next steps for alpha research
+
+If you want to continue evolving this into a stronger intelligent trading stack, the next high-value additions would be:
+
+1. **Return targets and auxiliary losses**
+   - add next-bar / next-day return forecasting heads alongside PPO.
+2. **Masking and universe control**
+   - dynamically disable illiquid or unavailable assets.
+3. **Transaction-cost realism**
+   - slippage, borrow costs, turnover penalties, and position limits.
+4. **Feature groups**
+   - news, fundamentals, macro, sentiment, and market microstructure.
+5. **Offline evaluation harness**
+   - Sharpe, max drawdown, turnover, hit ratio, exposure, and attribution metrics.
+
+## TensorBoard logs
+
+You can inspect logs with:
+
+```bash
 tensorboard --logdir tb_logs
+```
 
-You will find that not much info is being logged at this moment
+## Background articles
 
+This work is part of a series of articles written on Medium on Applied RL:
 
-Hi Guys! I have written a series on articles on medium about applying Reinforcement Learning to the Multi-Stock Algorithmic Trading problem. The first article gives an easy overview of the work and subsequent ones go into implementational details. For those of you who are interested the Github Repo with full code and dataset is also made available. The Links below will take you behind the medium paywall. Clap to show some love, leave a comment if you want to share something, if you like the repo please leave a star. Cheers! 
-
-1) Customized Deep Reinforcement Learning for Algorithmic Trading: https://medium.com/@akhileshgogikar/custom-deep-rl-for-algo-trading-106b1a2daa16?source=friends_link&sk=b06ef1dcd129be2a9dba39fa3b5c246a
-
-2) Custom RL for Algo Trading — Data Preprocessing: https://medium.com/@akhileshgogikar/applied-rl-data-preprocessing-for-algo-trading-4478251b9676?source=friends_link&sk=e52b0d8caa6fd0b1590c8342f7b5932d
-
-3) Custom Gym environment for multi-stock RL based Algo trading: https://medium.com/@akhileshgogikar/custom-gym-environment-for-multi-stock-algo-trading-113b07dd445d?source=friends_link&sk=e2dd8f83f3b3d3393db59fa2624d8dde
-
-4) Customization of RL policies using StableBaselines3: https://medium.com/@akhileshgogikar/applied-rl-customizing-neural-networks-for-rl-policies-a5a9e2cf763e?source=friends_link&sk=f5415c488d17e2a5c7d9aedb2a3af181
-
-5) Advanced deep learning customization of neural networks for RL based Algo trading: https://medium.com/@akhileshgogikar/applied-reinforcement-learning-3e73ca771bac?source=friends_link&sk=da6f6459563480f21503b37919b50e2c
+1. Customized Deep Reinforcement Learning for Algorithmic Trading: https://medium.com/@akhileshgogikar/custom-deep-rl-for-algo-trading-106b1a2daa16
+2. Custom RL for Algo Trading — Data Preprocessing: https://medium.com/@akhileshgogikar/applied-rl-data-preprocessing-for-algo-trading-4478251b9676
+3. Custom Gym environment for multi-stock RL based Algo trading: https://medium.com/@akhileshgogikar/custom-gym-environment-for-multi-stock-algo-trading-113b07dd445d
+4. Customization of RL policies using StableBaselines3: https://medium.com/@akhileshgogikar/applied-rl-customizing-neural-networks-for-rl-policies-a5a9e2cf763e
+5. Advanced deep learning customization of neural networks for RL based Algo trading: https://medium.com/@akhileshgogikar/applied-reinforcement-learning-3e73ca771bac
