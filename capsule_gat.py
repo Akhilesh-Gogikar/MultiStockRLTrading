@@ -60,7 +60,7 @@ class CapsGATattentionGRU(nn.Module):
         self.time_step = time_step
         self.outer_edge = outer_edge
         self.batch = 1
-        self.inner_edge = torch.tensor(outer_edge,dtype=torch.int64).to('cuda:0')
+        self.register_buffer('inner_edge', torch.tensor(outer_edge, dtype=torch.int64), persistent=False)
         self.use_gru = use_gru
         # hidden layers
         if self.use_gru:
@@ -71,7 +71,7 @@ class CapsGATattentionGRU(nn.Module):
 
         self.inner_gat0 = GATv2Conv(hidden_dim , hidden_dim)
         self.inner_gat1 = GATv2Conv(hidden_dim,hidden_dim)
-        self.attention = AttentionBlock(12,hidden_dim)
+        self.attention = AttentionBlock(time_step,hidden_dim)
         self.caps_module = CapsuleLinear(out_capsules=self.input_dim, in_length=2*hidden_dim, out_length=hidden_dim, in_capsules=None, routing_type='dynamic', num_iterations=3)
         self.fusion = nn.Linear(hidden_dim,input_dim)
 
@@ -92,13 +92,16 @@ class CapsGATattentionGRU(nn.Module):
         x = att_vector.view(-1, self.dim)
 
         if self.batch != batch:
-            outer_edge = self.outer_edge
-            for i in range(1,self.batch):
-                outer_edge2 = outer_edge+self.input_dim
-                outer_edge = np.concatenate((outer_edge,outer_edge2),axis=1)
+            outer_edge = self.outer_edge.copy()
+            current_edge = self.outer_edge.copy()
+            for _ in range(1, batch):
+                current_edge = current_edge + self.input_dim
+                outer_edge = np.concatenate((outer_edge, current_edge), axis=1)
 
-            self.inner_edge = torch.tensor(outer_edge,dtype=torch.int64).to('cuda:0')
+            self.inner_edge = torch.tensor(outer_edge, dtype=torch.int64, device=inputs.device)
             self.batch = batch
+        elif self.inner_edge.device != inputs.device:
+            self.inner_edge = self.inner_edge.to(inputs.device)
 
 
         # inner graph interaction
